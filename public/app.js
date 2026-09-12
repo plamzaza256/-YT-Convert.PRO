@@ -34,9 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let progressInterval = null;
 
     // Determine API Endpoint (supports both http://localhost:3000 and file:///)
-    const API_BASE = (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'))
-        ? ''
-        : 'http://localhost:3000';
+    const API_BASE = '';
+
 
     // Load History on startup
     loadHistory();
