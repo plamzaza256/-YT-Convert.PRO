@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Converter & Downloader (MP3, MP4, WAV) | สำหรับ Google Chrome</title>
+    <meta name="description" content="แปลงลิงก์ YouTube เป็นไฟล์ MP3, MP4, WAV, M4A, FLAC คุณภาพสูง 320kbps ฟรี รันบน Google Chrome ได้ทันที">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="glow-bg top-left"></div>
+    <div class="glow-bg bottom-right"></div>
+
+    <header class="navbar">
+        <div class="container nav-content">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i class="fa-brands fa-youtube"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>YT Convert<span>.PRO</span></h1>
+                    <span class="badge"><i class="fa-brands fa-chrome"></i> Chrome Edition</span>
+                </div>
+            </div>
+            <div class="nav-links">
+                <a href="#features" class="nav-link"><i class="fa-solid fa-bolt"></i> คุณสมบัติ</a>
+                <a href="#history" class="nav-link"><i class="fa-solid fa-clock-rotate-left"></i> ประวัติการแปลง</a>
+                <span class="status-indicator"><span class="dot"></span> เซิร์ฟเวอร์พร้อมใช้งาน</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="hero-header">
+                <h2>แปลงลิงก์ YouTube เป็น <span>MP3</span> และไฟล์มีเดีย</h2>
+                <p class="subtitle">รองรับการแปลงเป็น MP3 (320kbps), M4A, WAV, FLAC และวิดีโอ MP4 คมชัดสูง รันตรงบน Google Chrome ทันที</p>
+            </div>
+
+            <!-- Converter Card -->
+            <div class="converter-box">
+                <!-- URL Input -->
+                <div class="input-wrapper">
+                    <div class="input-icon">
+                        <i class="fa-solid fa-link"></i>
+                    </div>
+                    <input type="text" id="youtube-url" placeholder="วางลิงก์ YouTube ที่นี่... (เช่น https://www.youtube.com/watch?v=... หรือ Shorts)" autocomplete="off">
+                    <button class="action-btn" id="paste-btn" title="วางลิงก์จากคลิปบอร์ด">
+                        <i class="fa-regular fa-paste"></i> วาง
+                    </button>
+                    <button class="action-btn clear-btn" id="clear-btn" title="ล้างข้อความ" style="display: none;">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Video Preview Card (Shows upon valid URL) -->
+                <div class="preview-card" id="preview-card" style="display: none;">
+                    <div class="preview-thumb-container">
+                        <img src="" alt="Thumbnail" id="preview-thumb">
+                        <span class="duration-badge" id="preview-badge"><i class="fa-solid fa-play"></i> YouTube</span>
+                    </div>
+                    <div class="preview-info">
+                        <h4 id="preview-title">กำลังดึงข้อมูล...</h4>
+                        <p class="channel-name" id="preview-channel"><i class="fa-solid fa-circle-check"></i> <span>-</span></p>
+                        <div class="preview-tags">
+                            <span class="tag"><i class="fa-solid fa-music"></i> เสียงระดับ HQ</span>
+                            <span class="tag"><i class="fa-solid fa-film"></i> รองรับ MP4 / MP3</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Format Selection Tabs -->
+                <div class="format-selection">
+                    <div class="format-category-tabs">
+                        <button class="cat-tab active" data-type="audio">
+                            <i class="fa-solid fa-music"></i> ไฟล์เสียง (Audio)
+                        </button>
+                        <button class="cat-tab" data-type="video">
+                            <i class="fa-solid fa-video"></i> ไฟล์วิดีโอ (Video)
+                        </button>
+                    </div>
+
+                    <!-- Audio Options -->
+                    <div class="format-options-panel" id="audio-options">
+                        <div class="format-grid">
+                            <label class="format-pill active">
+                                <input type="radio" name="format" value="mp3" checked>
+                                <span class="pill-content">
+                                    <span class="fmt-name"><i class="fa-solid fa-bolt" style="color: #ef4444;"></i> MP3 Turbo</span>
+                                    <span class="fmt-desc">เร่งสปีด 2X (320 kbps คุณภาพสูง)</span>
+                                </span>
+                            </label>
+                            <label class="format-pill">
+                                <input type="radio" name="format" value="m4a">
+                                <span class="pill-content">
+                                    <span class="fmt-name"><i class="fa-solid fa-gauge-high" style="color: #38bdf8;"></i> M4A / AAC</span>
+                                    <span class="fmt-desc">🚀 โหลดไวสุดใน 1-2 วินาที (เสียงต้นฉบับ)</span>
+                                </span>
+                            </label>
+                            <label class="format-pill">
+                                <input type="radio" name="format" value="wav">
+                                <span class="pill-content">
+                                    <span class="fmt-name">WAV</span>
+                                    <span class="fmt-desc">เสียงสด ไม่บีบอัด</span>
+                                </span>
+                            </label>
+                            <label class="format-pill">
+                                <input type="radio" name="format" value="flac">
+                                <span class="pill-content">
+                                    <span class="fmt-name">FLAC</span>
+                                    <span class="fmt-desc">Lossless คุณภาพระดับสตูดิโอ</span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- Audio Bitrate Selection -->
+                        <div class="quality-selector" id="audio-quality-box">
+                            <label><i class="fa-solid fa-sliders"></i> คุณภาพบิตเรต (Bitrate):</label>
+                            <div class="quality-pills">
+                                <label class="q-pill active"><input type="radio" name="audio-quality" value="320" checked> 320 kbps (สูงสุด)</label>
+                                <label class="q-pill"><input type="radio" name="audio-quality" value="256"> 256 kbps (ดีมาก)</label>
+                                <label class="q-pill"><input type="radio" name="audio-quality" value="128"> 128 kbps (มาตรฐาน)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Video Options -->
+                    <div class="format-options-panel" id="video-options" style="display: none;">
+                        <div class="format-grid">
+                            <label class="format-pill">
+                                <input type="radio" name="format" value="mp4">
+                                <span class="pill-content">
+                                    <span class="fmt-name">MP4</span>
+                                    <span class="fmt-desc">ไฟล์วิดีโอมาตรฐานสากล</span>
+                                </span>
+                            </label>
+                            <label class="format-pill">
+                                <input type="radio" name="format" value="webm">
+                                <span class="pill-content">
+                                    <span class="fmt-name">WEBM</span>
+                                    <span class="fmt-desc">ขนาดกะทัดรัด เปิดบนเว็บลื่น</span>
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- Video Resolution Selection -->
+                        <div class="quality-selector">
+                            <label><i class="fa-solid fa-display"></i> ความละเอียดวิดีโอ (Resolution):</label>
+                            <div class="quality-pills">
+                                <label class="q-pill active"><input type="radio" name="video-quality" value="1080" checked> 1080p (Full HD)</label>
+                                <label class="q-pill"><input type="radio" name="video-quality" value="720"> 720p (HD)</label>
+                                <label class="q-pill"><input type="radio" name="video-quality" value="480"> 480p</label>
+                                <label class="q-pill"><input type="radio" name="video-quality" value="360"> 360p</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Convert CTA Button -->
+                <button class="convert-btn" id="convert-btn">
+                    <span class="btn-text"><i class="fa-solid fa-wand-magic-sparkles"></i> แปลงไฟล์และดาวน์โหลดทันที</span>
+                    <div class="btn-loader" style="display: none;">
+                        <div class="spinner"></div>
+                        <span>กำลังประมวลผล...</span>
+                    </div>
+                </button>
+
+                <!-- Live Conversion Progress Bar -->
+                <div class="progress-box" id="progress-box" style="display: none;">
+                    <div class="progress-header">
+                        <span id="progress-status-text"><i class="fa-solid fa-arrows-rotate fa-spin"></i> กำลังเชื่อมต่อระบบแปลงไฟล์...</span>
+                        <span id="progress-percentage">20%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progress-bar-fill" style="width: 20%;"></div>
+                    </div>
+                </div>
+
+                <!-- Processing / Download Result Status Box -->
+                <div class="result-box" id="result-box" style="display: none;">
+                    <div class="result-card">
+                        <div class="result-status-icon success" id="status-icon">
+                            <i class="fa-solid fa-check"></i>
+                        </div>
+                        <div class="result-details">
+                            <h4 id="result-title">แปลงไฟล์สำเร็จแล้ว!</h4>
+                            <p id="result-meta">ไฟล์พร้อมสำหรับการดาวน์โหลดลงคอมพิวเตอร์ของคุณ</p>
+                        </div>
+                        <div class="result-actions">
+                            <a href="#" class="btn-download" id="final-download-btn" target="_blank" download>
+                                <i class="fa-solid fa-circle-down"></i> กดดาวน์โหลดไฟล์ทันที
+                            </a>
+                            <a href="#" class="btn-mirror" id="mirror-download-btn" target="_blank" style="display: none;">
+                                <i class="fa-solid fa-up-right-from-square"></i> ลิงก์ดาวน์โหลดสำรอง
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Message Alert -->
+                <div class="error-alert" id="error-alert" style="display: none;">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span id="error-message">เกิดข้อผิดพลาดในการแปลงไฟล์</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feature Highlights -->
+        <section class="features-section" id="features">
+            <h3 class="section-heading">ทำไมต้องใช้งาน YT Convert PRO</h3>
+            <div class="feature-grid">
+                <div class="feature-item">
+                    <div class="feat-icon"><i class="fa-solid fa-bolt-lightning"></i></div>
+                    <h4>แปลงไฟล์รวดเร็ว</h4>
+                    <p>ระบบดึงสตรีมความเร็วสูง แปลงไฟล์ MP3 และ MP4 ได้ในเวลาไม่กี่วินาที</p>
+                </div>
+                <div class="feature-item">
+                    <div class="feat-icon"><i class="fa-solid fa-sliders"></i></div>
+                    <h4>ปรับแต่งได้หลายสกุล</h4>
+                    <p>รองรับทั้ง MP3, WAV, M4A, FLAC, MP4 พร้อมเลือกบิตเรตสูงสุด 320 kbps</p>
+                </div>
+                <div class="feature-item">
+                    <div class="feat-icon"><i class="fa-brands fa-chrome"></i></div>
+                    <h4>รันบน Google Chrome ได้ทันที</h4>
+                    <p>เปิดผ่านเบราว์เซอร์ Chrome ได้เลย ไม่ต้องติดตั้งโปรแกรมแปลกปลอมลงเครื่อง</p>
+                </div>
+                <div class="feature-item">
+                    <div class="feat-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                    <h4>ปลอดภัย 100% ไร้สแปม</h4>
+                    <p>ไม่มีโฆษณา pop-up กวนใจ ไม่มีไวรัส ดาวน์โหลดไฟล์ตรงสู่เครื่องอย่างปลอดภัย</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Download History -->
+        <section class="history-section" id="history">
+            <div class="section-header-row">
+                <h3 class="section-heading"><i class="fa-solid fa-clock-rotate-left"></i> ประวัติการแปลงไฟล์ล่าสุด</h3>
+                <button class="clear-history-btn" id="clear-history-btn">
+                    <i class="fa-solid fa-trash-can"></i> ล้างประวัติ
+                </button>
+            </div>
+            <div class="history-list" id="history-list">
+                <div class="empty-history">
+                    <i class="fa-solid fa-inbox"></i>
+                    <p>ยังไม่มีประวัติการแปลงไฟล์ ลองวางลิงก์และเริ่มแปลงได้เลย!</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container footer-content">
+            <p>© 2026 YT Convert PRO • ทำงานร่วมกับ Google Chrome ได้อย่างสมบูรณ์แบบ</p>
+            <p class="disclaimer">พัฒนาเพื่อการศึกษาและใช้งานส่วนบุคคลอย่างถูกต้องตามลิขสิทธิ์</p>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

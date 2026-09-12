@@ -1,0 +1,16 @@
+{
+  "name": "youtube-converter-web",
+  "version": "1.0.0",
+  "description": "YouTube to MP3, MP4 & multi-format converter web app for Google Chrome",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  },
+  "keywords": ["youtube", "mp3", "converter", "chrome", "downloader"],
+  "author": "Antigravity",
+  "license": "MIT"
+}
