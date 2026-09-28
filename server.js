@@ -202,34 +202,30 @@ const server = http.createServer(async (req, res) => {
                 const quality = isAudio ? audioQuality : videoQuality;
                 const cacheKey = `${videoId}_${format.toLowerCase()}_${quality}`;
 
-                // Check Cache for instant response (0.01s)
+                let rawDownloadUrl = '';
+
+                // Check Cache for instant response
                 const cached = CONVERT_CACHE.get(cacheKey);
                 if (cached && (Date.now() - cached.time < CACHE_TTL_MS)) {
                     console.log(`[⚡ Cache Hit] ส่งลิงก์ทันที (0 วินาที): ${cacheKey}`);
-                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-                    return res.end(JSON.stringify({
-                        success: true,
-                        downloadUrl: cached.url,
-                        format: format.toUpperCase(),
-                        videoId: videoId,
-                        filename: `youtube_${videoId}.${format}`,
-                        fromCache: true
-                    }));
+                    rawDownloadUrl = cached.url;
+                } else {
+                    // Process conversion with high-speed polling
+                    rawDownloadUrl = await convertViaDirectCDN(canonicalUrl, format, quality);
+                    CONVERT_CACHE.set(cacheKey, { url: rawDownloadUrl, time: Date.now() });
                 }
 
-                // Process conversion with high-speed polling
-                const downloadUrl = await convertViaDirectCDN(canonicalUrl, format, quality);
-
-                // Save to Cache
-                CONVERT_CACHE.set(cacheKey, { url: downloadUrl, time: Date.now() });
+                const filename = `youtube_${videoId}.${format.toLowerCase()}`;
+                // สร้าง Proxy Link ชี้เข้า /api/download แทนที่จะส่ง URL ตรงภายนอก
+                const safeProxyUrl = `/api/download?fileUrl=${encodeURIComponent(rawDownloadUrl)}&filename=${encodeURIComponent(filename)}`;
 
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
                 return res.end(JSON.stringify({
                     success: true,
-                    downloadUrl: downloadUrl,
+                    downloadUrl: safeProxyUrl,
                     format: format.toUpperCase(),
                     videoId: videoId,
-                    filename: `youtube_${videoId}.${format}`
+                    filename: filename
                 }));
 
             } catch (err) {
@@ -244,7 +240,65 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // 3. Static Files
+    // 3. API: Safe Proxy File Downloader (แก้ปัญหาปุ่มดาวน์โหลดเด้งไปเว็บพนัน/โฆษณา)
+    if (req.method === 'GET' && pathname === '/api/download') {
+        const fileUrl = parsedUrl.searchParams.get('fileUrl');
+        const filename = parsedUrl.searchParams.get('filename') || 'download.mp3';
+
+        if (!fileUrl) {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+            return res.end('Missing fileUrl parameter');
+        }
+
+        try {
+            const target = new URL(fileUrl);
+            const protocol = target.protocol === 'https:' ? https : http;
+
+            const proxyReq = protocol.get(fileUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                }
+            }, (proxyRes) => {
+                // จัดการ Redirect ของไฟล์
+                if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+                    const redirectUrl = proxyRes.headers.location.startsWith('http')
+                        ? proxyRes.headers.location
+                        : new URL(proxyRes.headers.location, fileUrl).href;
+
+                    res.writeHead(302, { 'Location': `/api/download?fileUrl=${encodeURIComponent(redirectUrl)}&filename=${encodeURIComponent(filename)}` });
+                    return res.end();
+                }
+
+                if (proxyRes.statusCode !== 200) {
+                    res.writeHead(proxyRes.statusCode, { 'Content-Type': 'text/plain; charset=utf-8' });
+                    return res.end('ไม่สามารถดึงไฟล์ได้จากเซิร์ฟเวอร์ต้นทาง');
+                }
+
+                // บังคับให้เบราว์เซอร์ดาวน์โหลดไฟล์ตรงทันที (Content-Disposition: attachment)
+                res.writeHead(200, {
+                    'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
+                    'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
+                    'Content-Length': proxyRes.headers['content-length'] || ''
+                });
+
+                // ส่งไฟล์ตรงจากต้นทางไปยังหน้าบ้านโดยไม่ผ่านโฆษณา
+                proxyRes.pipe(res);
+            });
+
+            proxyReq.on('error', (err) => {
+                console.error('[!] Proxy download error:', err.message);
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('เกิดข้อผิดพลาดขณะดาวน์โหลดไฟล์');
+            });
+
+        } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Invalid file URL');
+        }
+        return;
+    }
+
+    // 4. Static Files
     let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
     if (!filePath.startsWith(PUBLIC_DIR)) {
         res.writeHead(403);
