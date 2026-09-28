@@ -33,9 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let debounceTimer = null;
     let progressInterval = null;
 
-    // Determine API Endpoint (supports both http://localhost:3000 and file:///)
+    // Determine API Endpoint (supports relative paths for local and serverless)
     const API_BASE = '';
-
 
     // Load History on startup
     loadHistory();
@@ -152,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Show fast thumbnail
         previewThumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-        previewTitle.textContent = 'กำลังโหลดชื่อวิดีโอ...';
+        previewTitle.textContent = 'กำลังโหลดข้อมูลวิดีโอ...';
         previewChannel.textContent = 'YouTube';
         previewCard.style.display = 'flex';
 
@@ -213,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 6. Convert & Download Action (100% Ad-Free Direct File Stream)
+    // 6. Convert & Download Action (100% Ad-Free Direct File Stream via Proxy)
     convertBtn.addEventListener('click', async () => {
         const url = urlInput.value.trim();
         if (!url) {
@@ -248,18 +247,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentPct += (currentPct < 60 ? 8 : 3);
                 if (currentPct > 90) currentPct = 90;
                 let msg = 'กำลังประมวลผลการแปลงสัญญาณเสียง...';
-                if (currentPct >= 40 && currentPct < 70) msg = `กำลังเข้ารหัสไฟล์ ${selectedFormat.toUpperCase()} คุณภาพสูง (320kbps)...`;
-                if (currentPct >= 70) msg = 'กำลังจัดเตรียมไฟล์สำหรับดาวน์โหลดลง Google Chrome...';
+                if (currentPct >= 40 && currentPct < 70) msg = `กำลังเข้ารหัสไฟล์ ${selectedFormat.toUpperCase()} คุณภาพสูง...`;
+                if (currentPct >= 70) msg = 'กำลังจัดเตรียมไฟล์สำหรับดาวน์โหลดลงเครื่อง...';
                 updateProgress(currentPct, msg);
             }
-        }, 1500);
+        }, 1200);
 
         try {
             const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
             const videoTitle = currentVideoInfo ? currentVideoInfo.title : `YouTube_${videoId}`;
             const cleanFilename = `${sanitizeFilename(videoTitle)}.${selectedFormat}`;
 
-            // Call Backend Convert API (No CORS, Zero Ads)
+            // Call Backend Convert API (No CORS, Safe Proxy Links)
             const response = await fetch(`${API_BASE}/api/convert`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -285,21 +284,24 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Success 100%
-            updateProgress(100, 'แปลงไฟล์สำเร็จเรียบร้อย! กำลังเริ่มดาวน์โหลด...');
+            updateProgress(100, 'แปลงไฟล์สำเร็จเรียบร้อย! พร้อมดาวน์โหลด');
 
             const downloadUrl = data.downloadUrl;
 
-            // Show Result Card
+            // Update Result Card
             document.getElementById('result-title').textContent = `แปลงเป็น ${selectedFormat.toUpperCase()} สำเร็จแล้ว!`;
             document.getElementById('result-meta').textContent = `${videoTitle} • คุณภาพ: ${quality}${isAudio ? 'kbps' : 'p'} (ดาวน์โหลดไฟล์ตรง ไร้โฆษณา)`;
             
+            // ตั้งค่าปุ่มดาวน์โหลดหลักให้รันในแท็บเดิม (target="_self") เพื่อป้องกัน Pop-up
             finalDownloadBtn.href = downloadUrl;
             finalDownloadBtn.setAttribute('download', cleanFilename);
+            finalDownloadBtn.setAttribute('target', '_self');
+            
             if (mirrorDownloadBtn) mirrorDownloadBtn.style.display = 'none';
 
             resultBox.style.display = 'block';
 
-            // Trigger Google Chrome Direct Download (NO ADS, NO POPUPS)
+            // Trigger Direct Download Safe
             downloadDirectFile(downloadUrl, cleanFilename);
 
             // Save to history
@@ -315,22 +317,22 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInterval(progressInterval);
             console.error('Conversion error:', err);
             showAlert(err.message.includes('Failed to fetch') 
-                ? 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาดับเบิลคลิกเปิดไฟล์ start-youtube-converter.bat เพื่อเปิดใช้งาน'
+                ? 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาตรวจสอบว่าเซิร์ฟเวอร์กำลังรันอยู่หรือไม่'
                 : (err.message || 'เกิดข้อผิดพลาดในการแปลงไฟล์'));
         } finally {
             setLoading(false);
             setTimeout(() => {
                 progressBox.style.display = 'none';
-            }, 4000);
+            }, 3500);
         }
     });
 
-    // 100% Clean Direct File Download (Directly triggers Chrome Download Shelf)
+    // Clean Direct File Download (Uses _self to explicitly block pop-ups & external redirects)
     function downloadDirectFile(url, filename) {
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename || 'music.mp3';
-        a.target = '_self'; // Strictly self target, completely prevents pop-up ads!
+        a.download = filename || 'download.mp3';
+        a.target = '_self'; // ป้องกันการเปิดแท็บใหม่ที่เป็นช่องทางของสคริปต์โฆษณา
         document.body.appendChild(a);
         a.click();
         setTimeout(() => {
