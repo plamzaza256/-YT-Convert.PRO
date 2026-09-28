@@ -7,11 +7,10 @@ const { URL } = require('url');
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-// High-speed In-Memory Cache (Stores converted links for instant 0.01s retrieval)
+// High-speed In-Memory Cache
 const CONVERT_CACHE = new Map();
 const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-// MIME types for static files
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
@@ -23,7 +22,6 @@ const MIME_TYPES = {
     '.ico': 'image/x-icon'
 };
 
-// Helper: Extract YouTube Video ID
 function extractVideoId(inputUrl) {
     if (!inputUrl) return null;
     const clean = inputUrl.trim();
@@ -42,7 +40,6 @@ function extractVideoId(inputUrl) {
     return null;
 }
 
-// Helper: Native HTTPS JSON fetcher
 function fetchJson(targetUrl, options = {}) {
     return new Promise((resolve, reject) => {
         try {
@@ -56,7 +53,7 @@ function fetchJson(targetUrl, options = {}) {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                     'Accept': 'application/json, text/plain, */*'
                 },
-                timeout: options.timeout || 12000
+                timeout: options.timeout || 15000
             };
 
             const protocol = parsed.protocol === 'https:' ? https : http;
@@ -95,49 +92,93 @@ function fetchJson(targetUrl, options = {}) {
     });
 }
 
-// Convert via Direct CDN Stream with High-Frequency 600ms Polling
-async function convertViaDirectCDN(videoUrl, format, quality) {
+// Provider 1: Loader.to (มีขยายเวลา Polling เป็น 60 รอบ)
+async function convertViaLoaderTo(videoUrl, format, quality) {
     let fmt = (format || 'mp3').toLowerCase();
     if (fmt === 'mp4') {
         fmt = (quality === '1080' || quality === '720' || quality === '480' || quality === '360') ? quality : '720';
     }
 
-    const tStart = Date.now();
     const startUrl = `https://loader.to/ajax/download.php?format=${encodeURIComponent(fmt)}&url=${encodeURIComponent(videoUrl)}`;
-    console.log(`[*] [Turbo] เริ่มแปลง: ${fmt.toUpperCase()} (${videoUrl})`);
+    console.log(`[*] [Loader.to] เริ่มแปลง: ${fmt.toUpperCase()} (${videoUrl})`);
     
-    const startRes = await fetchJson(startUrl, { timeout: 12000 });
-
+    const startRes = await fetchJson(startUrl, { timeout: 15000 });
     if (!startRes.data || !startRes.data.id) {
-        throw new Error('ไม่สามารถเริ่มงานแปลงไฟล์ได้');
+        throw new Error('Loader.to ไม่ตอบสนอง');
     }
 
     const taskId = startRes.data.id;
     const progressUrl = startRes.data.progress_url || `https://loader.to/ajax/progress.php?id=${taskId}`;
 
-    // Fast-poll every 600ms (cuts idle delay by up to 60%)
-    for (let i = 1; i <= 35; i++) {
-        await new Promise(r => setTimeout(r, 600));
-        const pRes = await fetchJson(progressUrl, { timeout: 8000 });
-        if (pRes.data) {
+    // เพิ่มเป็น 60 รอบ x 1 วินาที = สูงสุด 60 วินาที
+    for (let i = 1; i <= 60; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const pRes = await fetchJson(progressUrl, { timeout: 8000 }).catch(() => null);
+        if (pRes && pRes.data) {
             if (pRes.data.download_url) {
-                const elapsed = ((Date.now() - tStart) / 1000).toFixed(1);
-                console.log(`[✓] [Turbo] สำเร็จใน ${elapsed} วินาที! (รอบที่ ${i})`);
                 return pRes.data.download_url;
             }
             if (pRes.data.success === 1 && pRes.data.progress >= 1000 && pRes.data.download_url) {
-                const elapsed = ((Date.now() - tStart) / 1000).toFixed(1);
-                console.log(`[✓] [Turbo] สำเร็จใน ${elapsed} วินาที!`);
                 return pRes.data.download_url;
             }
         }
     }
-    throw new Error('การแปลงไฟล์ใช้เวลานานเกินกำหนด');
+    throw new Error('Loader.to ประมวลผลช้าเกินกำหนด');
+}
+
+// Provider 2: Cobalt Direct Stream (ความเร็วสูงพิเศษ ไม่ต้องรอนาน)
+async function convertViaCobalt(videoUrl, format, quality) {
+    console.log(`[*] [Cobalt] เริ่มดึงลิงก์ตรงสำรอง...`);
+    const isAudio = ['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(format.toLowerCase());
+    
+    const res = await fetchJson('https://co.wuk.sh/api/json', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+        },
+        body: {
+            url: videoUrl,
+            vQuality: quality || '720',
+            aFormat: isAudio ? format.toLowerCase() : 'mp3',
+            isAudioOnly: isAudio
+        },
+        timeout: 12000
+    });
+
+    if (res.data && res.data.url) {
+        return res.data.url;
+    }
+    throw new Error('Cobalt API ไม่สามารถสร้างลิงก์ได้');
+}
+
+// Master Converter (สลับเซิร์ฟเวอร์อัตโนมัติหากค้าง)
+async function convertVideoSmart(videoUrl, format, quality) {
+    // ลองใช้ Loader.to ก่อน
+    try {
+        return await convertViaLoaderTo(videoUrl, format, quality);
+    } catch (err1) {
+        console.warn(`[!] Loader.to ล้มเหลว (${err1.message}) -> กำลังสลับไปใช้ API สำรอง...`);
+        
+        // ถ้าเป็น 1080p แล้วค้าง ให้สลับลอง 720p อัตโนมัติ
+        const tryQuality = (quality === '1080') ? '720' : quality;
+        
+        try {
+            return await convertViaCobalt(videoUrl, format, tryQuality);
+        } catch (err2) {
+            // หากยังไม่ได้ ให้ลอง Loader.to อีกครั้งที่ความละเอียด 720p
+            if (quality === '1080') {
+                console.warn(`[!] กำลังพยายามลดความละเอียดลงเหลือ 720p เพื่อให้ดาวน์โหลดสำเร็จ...`);
+                return await convertViaLoaderTo(videoUrl, format, '720');
+            }
+            throw new Error('เซิร์ฟเวอร์แปลงไฟล์ทั้งหมดไม่ตอบสนอง กรุณาลองใหม่อีกครั้งในภายหลัง');
+        }
+    }
 }
 
 // Create HTTP Server
 const server = http.createServer(async (req, res) => {
-    // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
@@ -182,7 +223,7 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
-    // 2. API: Convert Video/Audio (Turbo Accelerated + Fast Cache)
+    // 2. API: Convert Video/Audio
     if (req.method === 'POST' && pathname === '/api/convert') {
         let bodyStr = '';
         req.on('data', chunk => bodyStr += chunk);
@@ -204,19 +245,16 @@ const server = http.createServer(async (req, res) => {
 
                 let rawDownloadUrl = '';
 
-                // Check Cache for instant response
                 const cached = CONVERT_CACHE.get(cacheKey);
                 if (cached && (Date.now() - cached.time < CACHE_TTL_MS)) {
-                    console.log(`[⚡ Cache Hit] ส่งลิงก์ทันที (0 วินาที): ${cacheKey}`);
+                    console.log(`[⚡ Cache Hit] ส่งลิงก์ทันที: ${cacheKey}`);
                     rawDownloadUrl = cached.url;
                 } else {
-                    // Process conversion with high-speed polling
-                    rawDownloadUrl = await convertViaDirectCDN(canonicalUrl, format, quality);
+                    rawDownloadUrl = await convertVideoSmart(canonicalUrl, format, quality);
                     CONVERT_CACHE.set(cacheKey, { url: rawDownloadUrl, time: Date.now() });
                 }
 
                 const filename = `youtube_${videoId}.${format.toLowerCase()}`;
-                // สร้าง Proxy Link ชี้เข้า /api/download แทนที่จะส่ง URL ตรงภายนอก
                 const safeProxyUrl = `/api/download?fileUrl=${encodeURIComponent(rawDownloadUrl)}&filename=${encodeURIComponent(filename)}`;
 
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -233,14 +271,14 @@ const server = http.createServer(async (req, res) => {
                 res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
                 return res.end(JSON.stringify({
                     success: false,
-                    error: 'เกิดข้อผิดพลาดในการแปลงไฟล์: ' + err.message
+                    error: err.message || 'เกิดข้อผิดพลาดในการแปลงไฟล์'
                 }));
             }
         });
         return;
     }
 
-    // 3. API: Safe Proxy File Downloader (แก้ปัญหาปุ่มดาวน์โหลดเด้งไปเว็บพนัน/โฆษณา)
+    // 3. API: Safe Proxy File Downloader
     if (req.method === 'GET' && pathname === '/api/download') {
         const fileUrl = parsedUrl.searchParams.get('fileUrl');
         const filename = parsedUrl.searchParams.get('filename') || 'download.mp3';
@@ -259,7 +297,6 @@ const server = http.createServer(async (req, res) => {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
                 }
             }, (proxyRes) => {
-                // จัดการ Redirect ของไฟล์
                 if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
                     const redirectUrl = proxyRes.headers.location.startsWith('http')
                         ? proxyRes.headers.location
@@ -274,14 +311,12 @@ const server = http.createServer(async (req, res) => {
                     return res.end('ไม่สามารถดึงไฟล์ได้จากเซิร์ฟเวอร์ต้นทาง');
                 }
 
-                // บังคับให้เบราว์เซอร์ดาวน์โหลดไฟล์ตรงทันที (Content-Disposition: attachment)
                 res.writeHead(200, {
                     'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
                     'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
                     'Content-Length': proxyRes.headers['content-length'] || ''
                 });
 
-                // ส่งไฟล์ตรงจากต้นทางไปยังหน้าบ้านโดยไม่ผ่านโฆษณา
                 proxyRes.pipe(res);
             });
 
@@ -320,9 +355,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-    const localUrl = `http://localhost:${PORT}`;
     console.log(`====================================================`);
-    console.log(`⚡ YT Convert PRO (Turbo Speed Engine) รันแล้ว!`);
-    console.log(`🌐 Google Chrome: ${localUrl}`);
+    console.log(`⚡ YT Convert PRO (Smart Multi-API Engine) รันแล้ว!`);
+    console.log(`🌐 Google Chrome: http://localhost:${PORT}`);
     console.log(`====================================================`);
 });
