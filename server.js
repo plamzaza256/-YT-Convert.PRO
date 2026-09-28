@@ -92,7 +92,7 @@ function fetchJson(targetUrl, options = {}) {
     });
 }
 
-// Provider 1: Loader.to (มีขยายเวลา Polling เป็น 60 รอบ)
+// Provider 1: Loader.to
 async function convertViaLoaderTo(videoUrl, format, quality) {
     let fmt = (format || 'mp3').toLowerCase();
     if (fmt === 'mp4') {
@@ -110,7 +110,6 @@ async function convertViaLoaderTo(videoUrl, format, quality) {
     const taskId = startRes.data.id;
     const progressUrl = startRes.data.progress_url || `https://loader.to/ajax/progress.php?id=${taskId}`;
 
-    // เพิ่มเป็น 60 รอบ x 1 วินาที = สูงสุด 60 วินาที
     for (let i = 1; i <= 60; i++) {
         await new Promise(r => setTimeout(r, 1000));
         const pRes = await fetchJson(progressUrl, { timeout: 8000 }).catch(() => null);
@@ -126,7 +125,7 @@ async function convertViaLoaderTo(videoUrl, format, quality) {
     throw new Error('Loader.to ประมวลผลช้าเกินกำหนด');
 }
 
-// Provider 2: Cobalt Direct Stream (ความเร็วสูงพิเศษ ไม่ต้องรอนาน)
+// Provider 2: Cobalt Direct Stream
 async function convertViaCobalt(videoUrl, format, quality) {
     console.log(`[*] [Cobalt] เริ่มดึงลิงก์ตรงสำรอง...`);
     const isAudio = ['mp3', 'm4a', 'wav', 'flac', 'aac'].includes(format.toLowerCase());
@@ -153,26 +152,92 @@ async function convertViaCobalt(videoUrl, format, quality) {
     throw new Error('Cobalt API ไม่สามารถสร้างลิงก์ได้');
 }
 
-// Master Converter (สลับเซิร์ฟเวอร์อัตโนมัติหากค้าง)
+// Master Converter
 async function convertVideoSmart(videoUrl, format, quality) {
-    // ลองใช้ Loader.to ก่อน
     try {
         return await convertViaLoaderTo(videoUrl, format, quality);
     } catch (err1) {
         console.warn(`[!] Loader.to ล้มเหลว (${err1.message}) -> กำลังสลับไปใช้ API สำรอง...`);
-        
-        // ถ้าเป็น 1080p แล้วค้าง ให้สลับลอง 720p อัตโนมัติ
         const tryQuality = (quality === '1080') ? '720' : quality;
         
         try {
             return await convertViaCobalt(videoUrl, format, tryQuality);
         } catch (err2) {
-            // หากยังไม่ได้ ให้ลอง Loader.to อีกครั้งที่ความละเอียด 720p
             if (quality === '1080') {
                 console.warn(`[!] กำลังพยายามลดความละเอียดลงเหลือ 720p เพื่อให้ดาวน์โหลดสำเร็จ...`);
                 return await convertViaLoaderTo(videoUrl, format, '720');
             }
             throw new Error('เซิร์ฟเวอร์แปลงไฟล์ทั้งหมดไม่ตอบสนอง กรุณาลองใหม่อีกครั้งในภายหลัง');
+        }
+    }
+}
+
+// Stream Request Handler (ช่วยส่งข้อมูลไฟล์แบบเต็มรูปแบบ ป้องกันปัญหาสายหลุดบน Chrome)
+function streamFileToClient(fileUrl, filename, req, res, redirectsLeft = 5) {
+    if (redirectsLeft <= 0) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Too many redirects from source file server.');
+    }
+
+    try {
+        const target = new URL(fileUrl);
+        const protocol = target.protocol === 'https:' ? https : http;
+
+        const proxyReq = protocol.get(fileUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': '*/*'
+            }
+        }, (proxyRes) => {
+            // Handle redirects (301, 302, 307, 308)
+            if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+                const redirectUrl = proxyRes.headers.location.startsWith('http')
+                    ? proxyRes.headers.location
+                    : new URL(proxyRes.headers.location, fileUrl).href;
+                return streamFileToClient(redirectUrl, filename, req, res, redirectsLeft - 1);
+            }
+
+            if (proxyRes.statusCode !== 200 && proxyRes.statusCode !== 206) {
+                res.writeHead(proxyRes.statusCode, { 'Content-Type': 'text/plain; charset=utf-8' });
+                return res.end('ไม่สามารถดาวน์โหลดไฟล์ได้จากเซิร์ฟเวอร์ต้นทาง');
+            }
+
+            const responseHeaders = {
+                'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
+                'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
+                'Access-Control-Allow-Origin': '*'
+            };
+
+            if (proxyRes.headers['content-length']) {
+                responseHeaders['Content-Length'] = proxyRes.headers['content-length'];
+            }
+
+            res.writeHead(200, responseHeaders);
+
+            // Pipe stream directly
+            proxyRes.pipe(res);
+
+            proxyRes.on('error', (err) => {
+                console.error('[!] Stream Error:', err.message);
+                if (!res.headersSent) {
+                    res.writeHead(500);
+                    res.end();
+                }
+            });
+        });
+
+        proxyReq.on('error', (err) => {
+            console.error('[!] Request Proxy Error:', err.message);
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('เกิดข้อผิดพลาดขณะเชื่อมต่อเพื่อดาวน์โหลดไฟล์');
+            }
+        });
+
+    } catch (err) {
+        if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('URL สำหรับดาวน์โหลดไฟล์ไม่ถูกต้อง');
         }
     }
 }
@@ -288,48 +353,7 @@ const server = http.createServer(async (req, res) => {
             return res.end('Missing fileUrl parameter');
         }
 
-        try {
-            const target = new URL(fileUrl);
-            const protocol = target.protocol === 'https:' ? https : http;
-
-            const proxyReq = protocol.get(fileUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-                }
-            }, (proxyRes) => {
-                if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
-                    const redirectUrl = proxyRes.headers.location.startsWith('http')
-                        ? proxyRes.headers.location
-                        : new URL(proxyRes.headers.location, fileUrl).href;
-
-                    res.writeHead(302, { 'Location': `/api/download?fileUrl=${encodeURIComponent(redirectUrl)}&filename=${encodeURIComponent(filename)}` });
-                    return res.end();
-                }
-
-                if (proxyRes.statusCode !== 200) {
-                    res.writeHead(proxyRes.statusCode, { 'Content-Type': 'text/plain; charset=utf-8' });
-                    return res.end('ไม่สามารถดึงไฟล์ได้จากเซิร์ฟเวอร์ต้นทาง');
-                }
-
-                res.writeHead(200, {
-                    'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
-                    'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
-                    'Content-Length': proxyRes.headers['content-length'] || ''
-                });
-
-                proxyRes.pipe(res);
-            });
-
-            proxyReq.on('error', (err) => {
-                console.error('[!] Proxy download error:', err.message);
-                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end('เกิดข้อผิดพลาดขณะดาวน์โหลดไฟล์');
-            });
-
-        } catch (err) {
-            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end('Invalid file URL');
-        }
+        streamFileToClient(fileUrl, filename, req, res);
         return;
     }
 
@@ -356,7 +380,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
     console.log(`====================================================`);
-    console.log(`⚡ YT Convert PRO (Smart Multi-API Engine) รันแล้ว!`);
+    console.log(`⚡ YT Convert PRO (Stream Proxy Fixed) รันแล้ว!`);
     console.log(`🌐 Google Chrome: http://localhost:${PORT}`);
     console.log(`====================================================`);
 });
